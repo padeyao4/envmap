@@ -24,7 +24,6 @@ fn main() {
 
     let is_include_mode = cli.exclude.is_none();
     let regex_set = get_regex_set(&cli);
-    println!("{:?}", regex_set.patterns());
 
     let regex = get_regex(&arr_regex_types);
 
@@ -35,14 +34,11 @@ fn main() {
     {
         if entry.path().is_file() {
             let file_name = entry.file_name().to_string_lossy();
-            println!("file name : {}", file_name.to_owned());
             if regex_set.is_match(&file_name) {
-                println!("match file name : {}", file_name);
                 if is_include_mode {
                     handle_file(&entry, &regex, &map);
                 }
             } else {
-                println!("not match file name : {}", file_name);
                 if !is_include_mode {
                     handle_file(&entry, &regex, &map);
                 }
@@ -190,16 +186,12 @@ fn replace_vars_test() {
     map.insert("address".to_owned(), "homeless".to_owned());
     map.insert("phone".to_owned(), "123456".to_owned());
     map.insert("account".to_owned(), "0$".to_owned());
-
-    println!("{:?}", map);
-
     let regex_str = get_regex(&vec![
         VarType::LINUX,
         VarType::PYTHON,
         VarType::WINDOWS,
         VarType::MYBATIS,
     ]);
-    println!("{}", regex_str);
     let content = "name ${name}, age: $age , address: %address% , phone: #phone ${phone} , account: {{account}}, nothing: ${nothing}".to_owned();
     let text = replace_values(&regex_str, content, &map);
     let ans = "name tom, age: 18 , address: homeless , phone: 123456 123456 , account: 0$, nothing: ${nothing}";
