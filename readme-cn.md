@@ -4,7 +4,7 @@ envmap 是一个用 rust 编写的命令行工具，可以用来代替 envsubst�
 
 ## 安装
 
-你可以从[这里](https://github.com/user/envmap/releases)下载 envmap 的二进制文件，或者使用 cargo 安装：
+你可以从[这里](https://github.com/padeyao4/envmap/releases)下载 envmap 的二进制文件，或者使用 cargo 安装：
 
 ```bash
 cargo install envmap

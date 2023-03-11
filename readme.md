@@ -4,7 +4,7 @@ envmap is a command-line tool written in rust that can be used to replace envsub
 
 ## Installation
 
-You can download the binary file of envmap from [here](https://github.com/user/envmap/releases), or use cargo to install:
+You can download the binary file of envmap from [here](https://github.com/padeyao4/envmap/releases), or use cargo to install:
 
 ```bash
 cargo install envmap
