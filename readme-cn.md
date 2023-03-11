@@ -80,7 +80,7 @@ GENDER=male
 如果我们想要把 test 目录中所有文本文件中出现在 env.txt 中定义过得环境变量进行替换，并且只处理.py 和.json 类型得文件，则我们可以执行以下命令：
 
 ```bash
-envmap test --env-file test/sub/env.txt --include .py,.json --regex PYTHON
+envmap test --env-file test/sub/env.txt --include .py --include .json --regex PYTHON
 ```
 
 执行后得到结果如下：

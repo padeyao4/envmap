@@ -33,7 +33,7 @@ Note: Only one parameter `--include`or `--exclude`can be used. If both parameter
 
 Assume there is a directory structure as follows:
 
-```
+```text
 test/
 ├── config.txt
 ├── data.json
@@ -45,7 +45,7 @@ test/
 
 The contents of config.txt are as follows:
 
-```
+```text
 name=${NAME}
 age=$AGE
 gender={{GENDER}}
@@ -53,7 +53,7 @@ gender={{GENDER}}
 
 The contents of data.json are as follows:
 
-```
+```text
 {
   "name": "#{NAME}",
   "age": #AGE,
@@ -63,7 +63,7 @@ The contents of data.json are as follows:
 
 The contents of script.py are as follows:
 
-```
+```text
 print("Hello, {{NAME}}!")
 print("You are {{AGE}} years old.")
 print("Your gender is {{GENDER}}.")
@@ -71,7 +71,7 @@ print("Your gender is {{GENDER}}.")
 
 The contents of env.txt are as follows:
 
-```
+```text
 NAME=Bob
 AGE=25
 GENDER=male
@@ -80,14 +80,14 @@ GENDER=male
 If we want to replace all text files in test directory with environment variables defined in env.txt and only process .py and .json types files then we can execute following command:
 
 ```bash
-envmap test --env-file test/sub/env.txt --include .py,.json --regex PYTHON
+envmap test --env-file test/sub/env.txt --include .py --include .json --regex PYTHON
 ```
 
 After execution result like this：
 
 config.txt content unchanged (because it was not processed):
 
-```
+```text
 name=${NAME}
 age=$AGE
 gender={{GENDER}}
@@ -95,7 +95,7 @@ gender={{GENDER}}
 
 data.json content modified (because it was processed):
 
-```
+```text
 {
   "name": "Bob",
   "age": 25,
@@ -105,7 +105,7 @@ data.json content modified (because it was processed):
 
 script.py content modified (because it was processed):
 
-```
+```text
 print("Hello, Bob!")
 print("You are 25 years old.")
 print("Your gender is male.")
