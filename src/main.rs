@@ -1,5 +1,5 @@
-use clap::Parser;
-use regex::Regex;
+use clap::{Parser, ValueEnum};
+use regex::{Regex, RegexSet};
 use std::collections::HashMap;
 use std::fs;
 
@@ -8,71 +8,146 @@ use std::io::BufRead;
 use std::path::{Path, PathBuf};
 
 fn main() {
-    let cli = Cli::parse();
-    let input = cli.input;
-    let output = cli.output;
+    let cli = &Cli::parse();
     let mut map = read_sys_env();
-    if let Some(env_file) = cli.env_file {
+    if let Some(env_file) = &cli.env_file {
         let env_map = read_env_file(&env_file);
         map.extend(env_map);
     }
 
-    let regex = match cli.regex {
-        Some(reg) => reg,
-        None => r"(\$(\w+))|(\$\{\w+\})".to_owned(),
+    let default_var_types: &Vec<VarType> = &vec![VarType::LINUX];
+
+    let arr_regex_types = match &cli.regex {
+        Some(arr) => arr,
+        None => default_var_types,
     };
 
-    let regex = Regex::new(&regex).unwrap();
+    let is_include_mode = cli.exclude.is_none();
+    let regex_set = get_regex_set(&cli);
+    println!("{:?}", regex_set.patterns());
 
-    let content = fs::read_to_string(input).unwrap();
+    let regex = get_regex(&arr_regex_types);
 
-    let ans = regex.replace_all(&content, |caps: &regex::Captures| {
-        let group = caps.get(0);
-        let var_name = group.unwrap().as_str();
-        let var_name = var_name.strip_prefix("$").unwrap_or(var_name);        
-        let var_name = var_name.strip_prefix("{").unwrap_or(var_name);        
-        let var_name = var_name.strip_suffix("}").unwrap_or(var_name);        
-
-        println!("{}", var_name);
-        let var_value = map.get(var_name);
-        match var_value {
-            Some(value) => value.to_owned(),
-            None => "".to_owned(),
+    for entry in walkdir::WalkDir::new(&cli.path)
+        .follow_links(true)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        if entry.path().is_file() {
+            let file_name = entry.file_name().to_string_lossy();
+            println!("file name : {}", file_name.to_owned());
+            if regex_set.is_match(&file_name) {
+                println!("match file name : {}", file_name);
+                if is_include_mode {
+                    handle_file(&entry, &regex, &map);
+                }
+            } else {
+                println!("not match file name : {}", file_name);
+                if !is_include_mode {
+                    handle_file(&entry, &regex, &map);
+                }
+            }
         }
-    });
-
-    fs::write(output, ans.into_owned()).unwrap();
-    // regex.replace_all(text, rep)
+    }
 }
 
-// // 定义一个函数，接受一个字符串引用，并返回一个Result<String>
-// fn replace_env_vars(text: &str) -> Result<String, env::VarError> {
-//     // 定义一个正则表达式，匹配以$开头的环境变量名
-//     let re = Regex::new(r"\$(\w+)").unwrap();
+fn get_regex_set(cli: &Cli) -> RegexSet {
+    let empty = Vec::new();
+    let all = &".*".to_owned();
+    let include_arr = match &cli.include {
+        Some(v) => v,
+        None => &empty,
+    };
+    let exclude_arr = match &cli.exclude {
+        Some(v) => v,
+        None => &empty,
+    };
 
-//     // 使用闭包作为替换函数，获取环境变量的值并返回
-//     let result = re.replace_all(text, |caps: &regex::Captures| {
-//         if let Some(var_name) = caps.get(1) {
-//             if let Ok(var_value) = env::var(var_name.as_str()) {
-//                 return var_value;
-//             }
-//         }
-//         caps[0].to_string()
-//     });
+    let mut file_regex_arr = Vec::new();
+    file_regex_arr.extend(include_arr);
+    file_regex_arr.extend(exclude_arr);
 
-//     Ok(result.to_string())
-// }
+    if cli.include.is_none() && cli.exclude.is_none() {
+        let mut tmp_vec = vec![all];
+        file_regex_arr.append(&mut tmp_vec);
+    }
+
+    let regex_set = RegexSet::new(&file_regex_arr).unwrap();
+    regex_set
+}
+
+fn handle_file(entry: &walkdir::DirEntry, regex: &String, map: &HashMap<String, String>) {
+    let path = entry.path();
+    let content = fs::read_to_string(path).unwrap();
+    let text = replace_values(regex, content, map);
+    fs::write(path, text).unwrap();
+}
+
+fn get_regex(arr_regex_types: &Vec<VarType>) -> String {
+    let mut lst: Vec<&str> = Vec::new();
+    for ele in arr_regex_types {
+        let reg = match ele {
+            VarType::LINUX => r"(\$(\w+))|(\$\{\s?(\w+)\s?\})",
+            VarType::PYTHON => r"\{\{\s?(\w+)\s?\}\}",
+            VarType::MYBATIS => r"(#(\w+))|(\#\{\s?(\w+)\s?\})",
+            VarType::WINDOWS => r"(%(\w+)%)",
+        };
+        lst.push(reg);
+    }
+    let regex = lst.join("|");
+    regex
+}
+
+fn replace_values(regex: &String, content: String, map: &HashMap<String, String>) -> String {
+    let regex = Regex::new(&regex).unwrap();
+    let ans = regex.replace_all(&content, |caps: &regex::Captures| {
+        let key = find_var_name(caps);
+        let orgin_key = caps.get(0).unwrap().as_str().to_owned();
+        let ans = map.get(&key).unwrap_or(&orgin_key);
+        ans.to_owned()
+    });
+    ans.to_string()
+}
+
+fn find_var_name(caps: &regex::Captures) -> String {
+    let g0 = caps.get(0).unwrap();
+    let orgin_key = g0.as_str();
+    for g in caps.iter() {
+        if let Some(m) = g {
+            if !m.eq(&g0) {
+                return m.as_str().to_owned();
+            }
+        }
+    }
+    return orgin_key.to_string();
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+enum VarType {
+    /// $var and ${var}
+    LINUX,
+    /// {{var}}
+    PYTHON,
+    /// #var and #{var}
+    MYBATIS,
+    /// %var%
+    WINDOWS,
+}
 
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
-    input: PathBuf,
+    path: PathBuf,
 
-    output: PathBuf,
+    /// default use linux type
+    #[arg(short, long, value_enum)]
+    regex: Option<Vec<VarType>>,
 
-    /// default '${}' will be replace
-    #[arg(short, long)]
-    regex: Option<String>,
+    #[arg(long, conflicts_with = "exclude")]
+    include: Option<Vec<String>>,
+
+    #[arg(long, conflicts_with = "include")]
+    exclude: Option<Vec<String>>,
 
     /// env_file contain key=value
     #[arg(short, long)]
@@ -85,10 +160,15 @@ fn read_env_file(path: &Path) -> HashMap<String, String> {
     let reader = std::io::BufReader::new(file);
     for line in reader.lines() {
         let s = line.unwrap();
-        let (k, v) = s.split_once('=').unwrap();
-        let key = k.trim().to_string();
-        let value = v.trim().to_string();
-        map.insert(key, value);
+        if s.is_empty() {
+            continue;
+        }
+
+        if let Some((k, v)) = s.split_once('=') {
+            let key = k.trim().to_string();
+            let value = v.trim().to_string();
+            map.insert(key, value);
+        }
     }
     return map;
 }
@@ -103,6 +183,25 @@ fn read_sys_env() -> HashMap<String, String> {
 }
 
 #[test]
-fn test_env() {
-    read_sys_env();
+fn replace_vars_test() {
+    let mut map = HashMap::new();
+    map.insert("name".to_owned(), "tom".to_owned());
+    map.insert("age".to_owned(), "18".to_owned());
+    map.insert("address".to_owned(), "homeless".to_owned());
+    map.insert("phone".to_owned(), "123456".to_owned());
+    map.insert("account".to_owned(), "0$".to_owned());
+
+    println!("{:?}", map);
+
+    let regex_str = get_regex(&vec![
+        VarType::LINUX,
+        VarType::PYTHON,
+        VarType::WINDOWS,
+        VarType::MYBATIS,
+    ]);
+    println!("{}", regex_str);
+    let content = "name ${name}, age: $age , address: %address% , phone: #phone ${phone} , account: {{account}}, nothing: ${nothing}".to_owned();
+    let text = replace_values(&regex_str, content, &map);
+    let ans = "name tom, age: 18 , address: homeless , phone: 123456 123456 , account: 0$, nothing: ${nothing}";
+    assert_eq!(ans, text);
 }
